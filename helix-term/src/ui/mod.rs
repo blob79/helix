@@ -223,6 +223,7 @@ pub fn file_picker(editor: &Editor, root: PathBuf) -> FilePicker {
     let dedup_symlinks = config.file_picker.deduplicate_links;
     let absolute_root = root.canonicalize().unwrap_or_else(|_| root.clone());
 
+    // the walk builder is here
     let mut walk_builder = WalkBuilder::new(&root);
 
     let mut files = walk_builder

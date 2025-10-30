@@ -144,6 +144,7 @@ fn open(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow:
 }
 
 fn open_impl(cx: &mut compositor::Context, args: Args, action: Action) -> anyhow::Result<()> {
+    // TJU open is here
     for arg in args {
         let (path, pos) = crate::args::parse_file(&arg);
         let path = helix_stdx::path::expand_tilde(path);
@@ -375,6 +376,31 @@ fn buffer_previous(
     Ok(())
 }
 
+fn buffer_next_sorted(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+
+    goto_buffer_sorted(cx.editor, Direction::Forward, 1);
+    Ok(())
+}
+
+fn buffer_previous_sorted(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+
+    goto_buffer_sorted(cx.editor, Direction::Backward, 1);
+    Ok(())
+}
 fn write_impl(
     cx: &mut compositor::Context,
     path: Option<&str>,
@@ -2847,6 +2873,28 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
         aliases: &["bp", "bprev"],
         doc: "Goto previous buffer.",
         fun: buffer_previous,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(0)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
+        name: "buffer-sorted-next",
+        aliases: &["bsn"],
+        doc: "Goto next buffer sorted by name.",
+        fun: buffer_next_sorted,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(0)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
+        name: "buffer-sorted-previous",
+        aliases: &["bsp"],
+        doc: "Goto previous buffer sorted by name.",
+        fun: buffer_previous_sorted,
         completer: CommandCompleter::none(),
         signature: Signature {
             positionals: (0, Some(0)),

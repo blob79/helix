@@ -463,6 +463,8 @@ impl MappableCommand {
         extend_to_column, "Extend to column",
         goto_next_buffer, "Goto next buffer",
         goto_previous_buffer, "Goto previous buffer",
+        goto_next_buffer_sorted, "Go to the next buffer alphabetically",
+        goto_prev_buffer_sorted, "Go to the previous buffer alphabetically",
         goto_line_end_newline, "Goto newline at line end",
         goto_first_nonwhitespace, "Goto first non-blank in line",
         trim_selections, "Trim whitespace from selections",
@@ -905,6 +907,34 @@ fn goto_line_start(cx: &mut Context) {
     )
 }
 
+fn goto_next_buffer_sorted(cx: &mut Context) {
+    goto_buffer_sorted(cx.editor, Direction::Forward, cx.count());
+}
+
+fn goto_prev_buffer_sorted(cx: &mut Context) {
+    goto_buffer_sorted(cx.editor, Direction::Backward, cx.count());
+}
+
+fn goto_buffer_sorted(editor: &mut Editor, direction: Direction, count: usize) {
+    let (_, doc) = current_ref!(editor);
+    let current = doc.id();
+    let mut v: Vec<_> = editor.documents.values().collect();
+    v.sort_by_key(|d| d.id());
+    v.sort_by_key(|d| d.path().map(|p| p.parent()));
+    v.sort_by_key(|d| d.path().map(|p| p.file_name()));
+    let iter = v.iter().map(|d| d.id());
+    let id = match direction {
+        Direction::Forward => iter.cycle().skip_while(|id| *id != current).nth(count),
+        Direction::Backward => iter
+            .rev()
+            .cycle()
+            .skip_while(|id| *id != current)
+            .nth(count),
+    }
+    .unwrap();
+    editor.switch(id, Action::Replace);
+}
+
 fn goto_next_buffer(cx: &mut Context) {
     goto_buffer(cx.editor, Direction::Forward, cx.count());
 }
@@ -1327,6 +1357,7 @@ fn goto_file_vsplit(cx: &mut Context) {
 }
 
 /// Goto files in selection.
+/// goto is here TJU
 fn goto_file_impl(cx: &mut Context, action: Action) {
     let (view, doc) = current_ref!(cx.editor);
     let text = doc.text().slice(..);

@@ -1,6 +1,7 @@
 use helix_term::application::Application;
 
 use super::*;
+use helix_view::current_ref;
 
 mod insert;
 mod movement;
@@ -117,6 +118,158 @@ async fn test_selection_duplication() -> anyhow::Result<()> {
             "},
     ))
     .await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_goto_next_buffer_sorted() -> anyhow::Result<()> {
+
+    let root = tempfile::TempDir::new()?;
+    let p_1 = tempfile::Builder::new().prefix("1").tempdir_in(&root)?;
+    let p_2 = tempfile::Builder::new().prefix("2").tempdir_in(&root)?;
+    let p_3 = tempfile::Builder::new().prefix("3").tempdir_in(&root)?;
+    let p_a = tempfile::Builder::new().prefix("a").tempfile_in(&root)?;
+    let p_1b = tempfile::Builder::new().prefix("b").rand_bytes(0).tempfile_in(&p_1)?;
+    let p_2b = tempfile::Builder::new().prefix("b").rand_bytes(0).tempfile_in(&p_2)?;
+    let p_3b = tempfile::Builder::new().prefix("b").rand_bytes(0).tempfile_in(&p_3)?;
+    let p_c = tempfile::Builder::new().prefix("c").tempfile_in(&root)?;
+
+    test_key_sequence(
+        &mut AppBuilder::new().build()?,
+        Some("]b"),
+        Some(&|app| {
+            assert_status_not_error(&app.editor);
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new().build()?,
+        Some("[b"),
+        Some(&|app| {
+            assert_status_not_error(&app.editor);
+        }),
+        false,
+    )
+    .await?;
+
+
+    test_key_sequence(
+        &mut AppBuilder::new().build()?,
+        Some("i1<esc>:new<ret>i2<esc>:new<ret>i3<esc>]b"),
+        Some(&|app| {
+            assert_status_not_error(&app.editor);
+            let (_, doc) = current_ref!(app.editor);
+            assert_eq!("1\n", doc.text());
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new().build()?,
+        Some("i1<esc>:new<ret>i2<esc>:new<ret>i3<esc>[b"),
+        Some(&|app| {
+            assert_status_not_error(&app.editor);
+            let (_, doc) = current_ref!(app.editor);
+            assert_eq!("2\n", doc.text());
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new()
+            .with_file(p_1b.path(), None)
+            .with_file(p_a.path(), None)
+            .with_file(p_c.path(), None)
+            .build()?,
+        Some("]b"),
+        Some(&|app| {
+            let (_, doc) = current_ref!(app.editor);
+            assert_eq!(p_c.path(), doc.path().unwrap());
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new()
+            .with_file(p_1b.path(), None)
+            .with_file(p_a.path(), None)
+            .with_file(p_c.path(), None)
+            .build()?,
+        Some("]b]b"),
+        Some(&|app| {
+            let (_, doc) = current_ref!(app.editor);
+            assert_eq!(p_a.path(), doc.path().unwrap());
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new()
+            .with_file(p_1b.path(), None)
+            .with_file(p_a.path(), None)
+            .with_file(p_c.path(), None)
+            .build()?,
+        Some("[b"),
+        Some(&|app| {
+            let (_, doc) = current_ref!(app.editor);
+            assert_eq!(p_a.path(), doc.path().unwrap());
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new()
+            .with_file(p_1b.path(), None)
+            .with_file(p_a.path(), None)
+            .with_file(p_c.path(), None)
+            .build()?,
+        Some("[b[b"),
+        Some(&|app| {
+            let (_, doc) = current_ref!(app.editor);
+            assert_eq!(p_c.path(), doc.path().unwrap());
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new()
+            .with_file(p_2b.path(), None)
+            .with_file(p_1b.path(), None)
+            .with_file(p_3b.path(), None)
+            .build()?,
+        Some("]b"),
+        Some(&|app| {
+            let (_, doc) = current_ref!(app.editor);
+            assert_eq!(p_3b.path(), doc.path().unwrap(), "{p_1b:?}{p_2b:?}{p_3b:?}");
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new()
+            .with_file(p_2b.path(), None)
+            .with_file(p_1b.path(), None)
+            .with_file(p_3b.path(), None)
+            .build()?,
+        Some("[b"),
+        Some(&|app| {
+            let (_, doc) = current_ref!(app.editor);
+            assert_eq!(p_1b.path(), doc.path().unwrap());
+        }),
+        false,
+    )
+    .await?;
+
+
     Ok(())
 }
 
