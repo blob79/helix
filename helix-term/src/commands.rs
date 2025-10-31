@@ -65,6 +65,7 @@ use crate::{
     compositor::{self, Component, Compositor},
     filter_picker_entry,
     job::Callback,
+    parent_dir,
     ui::{self, overlay::overlaid, Picker, PickerColumn, Popup, Prompt, PromptEvent},
 };
 
@@ -3109,19 +3110,6 @@ fn file_picker_in_current_buffer_directory(cx: &mut Context) {
 
     let picker = ui::file_picker(cx.editor, path);
     cx.push_layer(Box::new(overlaid(picker)));
-}
-
-fn parent_dir(editor: &mut Editor) -> Option<PathBuf> {
-    let doc_dir = doc!(editor)
-        .path()
-        .and_then(|path| path.parent().map(|path| path.to_path_buf()));
-    match doc_dir {
-        None => {
-            editor.set_error("current buffer has no path or parent");
-            None
-        }
-        e => e,
-    }
 }
 
 fn file_picker_in_current_directory(cx: &mut Context) {
