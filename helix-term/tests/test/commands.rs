@@ -1,7 +1,10 @@
 use helix_term::application::Application;
+use helix_view::editor::Severity;
 
 use super::*;
 use helix_view::current_ref;
+use std::fs::File;
+use std::ops::Deref;
 
 mod insert;
 mod movement;
@@ -123,15 +126,23 @@ async fn test_selection_duplication() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_goto_next_buffer_sorted() -> anyhow::Result<()> {
-
     let root = tempfile::TempDir::new()?;
     let p_1 = tempfile::Builder::new().prefix("1").tempdir_in(&root)?;
     let p_2 = tempfile::Builder::new().prefix("2").tempdir_in(&root)?;
     let p_3 = tempfile::Builder::new().prefix("3").tempdir_in(&root)?;
     let p_a = tempfile::Builder::new().prefix("a").tempfile_in(&root)?;
-    let p_1b = tempfile::Builder::new().prefix("b").rand_bytes(0).tempfile_in(&p_1)?;
-    let p_2b = tempfile::Builder::new().prefix("b").rand_bytes(0).tempfile_in(&p_2)?;
-    let p_3b = tempfile::Builder::new().prefix("b").rand_bytes(0).tempfile_in(&p_3)?;
+    let p_1b = tempfile::Builder::new()
+        .prefix("b")
+        .rand_bytes(0)
+        .tempfile_in(&p_1)?;
+    let p_2b = tempfile::Builder::new()
+        .prefix("b")
+        .rand_bytes(0)
+        .tempfile_in(&p_2)?;
+    let p_3b = tempfile::Builder::new()
+        .prefix("b")
+        .rand_bytes(0)
+        .tempfile_in(&p_3)?;
     let p_c = tempfile::Builder::new().prefix("c").tempfile_in(&root)?;
 
     test_key_sequence(
@@ -153,7 +164,6 @@ async fn test_goto_next_buffer_sorted() -> anyhow::Result<()> {
         false,
     )
     .await?;
-
 
     test_key_sequence(
         &mut AppBuilder::new().build()?,
@@ -268,7 +278,6 @@ async fn test_goto_next_buffer_sorted() -> anyhow::Result<()> {
         false,
     )
     .await?;
-
 
     Ok(())
 }
@@ -995,5 +1004,119 @@ async fn global_search_with_multibyte_chars() -> anyhow::Result<()> {
     ))
     .await?;
 
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_goto_next_file() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+
+    let a = dir.path().join("a");
+    let b = dir.path().join("b");
+    let c = dir.path().join("c");
+    let d = dir.path().join("d").join("ignored");
+
+    std::fs::create_dir(d.parent().unwrap())?;
+
+    File::create(&a)?;
+    File::create(&b)?;
+    File::create(&c)?;
+    File::create(&d)?;
+
+    test_key_sequence(
+        &mut helpers::AppBuilder::new().build()?,
+        Some("]'"),
+        Some(&|app| {
+            let (msg, severity) = app.editor.get_status().unwrap();
+            assert_eq!("current buffer has no path or parent", msg);
+            assert_eq!(&Severity::Error, severity);
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut helpers::AppBuilder::new().build()?,
+        Some("['"),
+        Some(&|app| {
+            let (msg, severity) = app.editor.get_status().unwrap();
+            assert_eq!("current buffer has no path or parent", msg);
+            assert_eq!(&Severity::Error, severity);
+        }),
+        false,
+    )
+    .await?;
+
+    fn open_buffers(app: &Application) -> Vec<String> {
+        app.editor
+            .documents()
+            .filter_map(|d| d.path()?.file_name())
+            .map(|n| n.to_string_lossy().deref().to_owned())
+            .collect()
+    }
+
+    test_key_sequence(
+        &mut AppBuilder::new().with_file(&b, None).build()?,
+        Some("['"),
+        Some(&|app| {
+            assert_eq!(vec!["b", "a"], open_buffers(app));
+            assert_status_not_error(&app.editor);
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new().with_file(&c, None).build()?,
+        Some("['['['['['"),
+        Some(&|app| {
+            assert_eq!(vec!["c", "b", "a"], open_buffers(app));
+
+            let (msg, severity) = app.editor.get_status().unwrap();
+            assert_eq!("No more files", msg);
+            assert_eq!(&Severity::Error, severity);
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new().with_file(&b, None).build()?,
+        Some("]'"),
+        Some(&|app| {
+            assert_eq!(vec!["b", "c"], open_buffers(app));
+            assert_status_not_error(&app.editor);
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new().with_file(&a, None).build()?,
+        Some("]']']']']'"),
+        Some(&|app| {
+            assert_eq!(vec!["a", "b", "c"], open_buffers(app));
+
+            let (msg, severity) = app.editor.get_status().unwrap();
+            assert_eq!("No more files", msg);
+            assert_eq!(&Severity::Error, severity);
+        }),
+        false,
+    )
+    .await?;
+
+    test_key_sequence(
+        &mut AppBuilder::new()
+            .with_file(dir.path().join("not").join("there"), None)
+            .build()?,
+        Some("['"),
+        Some(&|app| {
+            let (msg, severity) = app.editor.get_status().unwrap();
+            assert_eq!("No more files", msg);
+            assert_eq!(&Severity::Error, severity);
+        }),
+        false,
+    )
+    .await?;
     Ok(())
 }
